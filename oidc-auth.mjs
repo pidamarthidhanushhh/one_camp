@@ -20,7 +20,7 @@ function requiredSetting(name) {
 
 function settings() {
   const issuer = new URL(requiredSetting("OIDC_ISSUER"));
-  const redirectUri = new URL(requiredSetting("OIDC_REDIRECT_URI"));
+  const redirectUri = getOidcRedirectUri();
   const clientId = requiredSetting("OIDC_CLIENT_ID");
   const clientSecret = requiredSetting("OIDC_CLIENT_SECRET");
   const sessionSecret = requiredSetting("SESSION_SECRET");
@@ -53,6 +53,15 @@ function settings() {
     allowedDomains,
     sessionSeconds: Math.min(configuredSessionSeconds, 30 * 24 * 60 * 60),
   };
+}
+
+export function getOidcRedirectUri() {
+  const configured = process.env.OIDC_REDIRECT_URI?.trim();
+  if (configured) return new URL(configured);
+  if (process.env.RENDER_EXTERNAL_URL) {
+    return new URL("/auth/callback", process.env.RENDER_EXTERNAL_URL);
+  }
+  throw new Error("OIDC_REDIRECT_URI is required when the host does not provide RENDER_EXTERNAL_URL.");
 }
 
 function getConfiguration(config) {

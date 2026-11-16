@@ -7,6 +7,7 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env server.mjs",
+    "start:production": "node --env-file-if-exists=.env run-production.mjs",
     "db:migrate": "node --env-file-if-exists=.env migrate.mjs",
     "worker": "node --env-file-if-exists=.env document-worker.mjs",
     "test": "node --test"
