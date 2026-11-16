@@ -218,6 +218,42 @@ test("explains that AI features are off in the presentation demo", async () => {
   }
 });
 
+test("never calls Gemini from presentation demo mode, even when a key is configured", async () => {
+  const previousMode = process.env.NODE_ENV;
+  let upstreamCalls = 0;
+  process.env.NODE_ENV = "demo";
+  const demoServer = createServer({
+    getApiKey: () => "test-secret",
+    fetchGemini: async () => {
+      upstreamCalls += 1;
+      throw new Error("Gemini must not be called in presentation mode.");
+    },
+  });
+  await new Promise((resolve) => demoServer.listen(0, "127.0.0.3", resolve));
+  try {
+    const baseUrl = `http://127.0.0.3:${demoServer.address().port}`;
+    for (const [pathname, body] of [
+      ["/api/analyze-pdf", { pdfBase64: "JVBERi0=" }],
+      ["/api/chat", { messages: [{ role: "user", text: "Hello" }] }],
+      ["/api/generate-study-summary", { resourceTitle: "Sample", pdfBase64: "JVBERi0=" }],
+      ["/api/generate-study-tools", { resourceTitle: "Sample", toolType: "quiz", pdfBase64: "JVBERi0=" }],
+    ]) {
+      const response = await fetch(`${baseUrl}${pathname}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      assert.equal(response.status, 503, pathname);
+      assert.match((await response.json()).error, /turned off in this presentation demo/, pathname);
+    }
+    assert.equal(upstreamCalls, 0);
+  } finally {
+    await new Promise((resolve, reject) => demoServer.close((error) => error ? reject(error) : resolve()));
+    if (previousMode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousMode;
+  }
+});
+
 test("rejects invalid PDFs before contacting Gemini", async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = "test-key-not-used";

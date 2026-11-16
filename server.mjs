@@ -102,6 +102,10 @@ function unavailableAiMessage(feature, configuredMessage) {
     : configuredMessage;
 }
 
+function getConfiguredApiKey(getApiKey) {
+  return process.env.NODE_ENV === "demo" ? undefined : getApiKey();
+}
+
 function readJson(request) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -197,7 +201,7 @@ async function analyzePdf(request, response, { fetchGemini, getApiKey, requestCo
     return;
   }
 
-  const apiKey = getApiKey();
+  const apiKey = getConfiguredApiKey(getApiKey);
   if (!apiKey) {
     respondJson(response, 503, { error: unavailableAiMessage("PDF analysis", "PDF analysis is not configured. Set GEMINI_API_KEY on the server.") });
     return;
@@ -322,7 +326,7 @@ async function chatWithRaze(request, response, { fetchGemini, getApiKey, request
     return;
   }
 
-  const apiKey = getApiKey();
+  const apiKey = getConfiguredApiKey(getApiKey);
   if (!apiKey) {
     respondJson(response, 503, { error: unavailableAiMessage("Raze", "Raze is not configured. Set GEMINI_API_KEY on the server.") });
     return;
@@ -502,7 +506,7 @@ async function generateStudySummary(request, response, { fetchGemini, getApiKey,
     return;
   }
 
-  const apiKey = getApiKey();
+  const apiKey = getConfiguredApiKey(getApiKey);
   if (!apiKey) {
     respondJson(response, 503, { error: unavailableAiMessage("AI summaries", "AI summaries are not configured. Set GEMINI_API_KEY on the server.") });
     return;
@@ -655,7 +659,7 @@ async function generateStudyTools(request, response, { fetchGemini, getApiKey, r
     return;
   }
 
-  const apiKey = getApiKey();
+  const apiKey = getConfiguredApiKey(getApiKey);
   if (!apiKey) {
     respondJson(response, 503, { error: unavailableAiMessage("AI practice tools", "AI practice tools are not configured. Set GEMINI_API_KEY on the server.") });
     return;
