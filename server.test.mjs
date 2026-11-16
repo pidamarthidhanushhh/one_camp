@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createServer as createHttpServer } from "node:http";
 import { after, before, test } from "node:test";
 import { assertProductionConfiguration, createServer } from "./server.mjs";
@@ -206,6 +207,13 @@ test("serves the PDF.js renderer and worker with an ES module content type", asy
   assert.equal(worker.status, 200);
   assert.match(renderer.headers.get("content-type"), /^text\/javascript/);
   assert.match(worker.headers.get("content-type"), /^text\/javascript/);
+});
+
+test("loads PDF.js in the browser without bundling its root-relative runtime URLs", async () => {
+  const source = await readFile(new URL("./pdf-preview.js", import.meta.url), "utf8");
+  assert.match(source, /import\(pdfModuleUrl\.href\)/);
+  assert.match(source, /new URL\("\/node_modules\/pdfjs-dist\/build\/pdf\.mjs", window\.location\.origin\)/);
+  assert.doesNotMatch(source, /^import \* as pdfjsLib from "\/node_modules/m);
 });
 
 test("does not expose local environment or project files through static hosting", async () => {
