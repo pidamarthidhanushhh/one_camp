@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { createServer as createHttpServer } from "node:http";
 import { after, before, test } from "node:test";
 import { assertProductionConfiguration, createServer } from "./server.mjs";
+import { createVercelHandler } from "./api/index.mjs";
 
 const server = createServer();
 let baseUrl;
@@ -92,6 +94,43 @@ test("serves standalone role workspaces without the login page", async () => {
     assert.match(html, new RegExp(`data-workspace-page="${pathname.slice(1)}"`));
     assert.match(html, /id="app-shell">/);
     assert.doesNotMatch(html, /id="login-page"/);
+  }
+});
+
+test("Vercel handler restores rewritten workspace paths", async () => {
+  const previousPresentationMode = process.env.CAMPUS_PRESENTATION_MODE;
+  let upstreamCalls = 0;
+  const vercelServer = createHttpServer(createVercelHandler(createServer({
+    getApiKey: () => "test-secret",
+    fetchGemini: async () => {
+      upstreamCalls += 1;
+      throw new Error("Gemini must not be called in presentation mode.");
+    },
+  })));
+  await new Promise((resolve) => vercelServer.listen(0, "127.0.0.1", resolve));
+  try {
+    const baseUrl = `http://127.0.0.1:${vercelServer.address().port}/api/index?__campus_path=`;
+    const response = await fetch(`${baseUrl}%2Fstudent`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /data-workspace-page="student"/);
+
+    const chatResponse = await fetch(`${baseUrl}%2Fapi%2Fchat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", text: "Hello" }] }),
+    });
+    assert.equal(chatResponse.status, 503);
+    assert.match((await chatResponse.json()).error, /turned off in this presentation demo/);
+    assert.equal(upstreamCalls, 0);
+
+    const rendererResponse = await fetch(`${baseUrl}%2Fnode_modules%2Fpdfjs-dist%2Fbuild%2Fpdf.mjs`);
+    assert.equal(rendererResponse.status, 200);
+    assert.match(rendererResponse.headers.get("content-type"), /^text\/javascript/);
+  } finally {
+    await new Promise((resolve, reject) => vercelServer.close((error) => error ? reject(error) : resolve()));
+    if (previousPresentationMode === undefined) delete process.env.CAMPUS_PRESENTATION_MODE;
+    else process.env.CAMPUS_PRESENTATION_MODE = previousPresentationMode;
   }
 });
 
@@ -220,8 +259,10 @@ test("explains that AI features are off in the presentation demo", async () => {
 
 test("never calls Gemini from presentation demo mode, even when a key is configured", async () => {
   const previousMode = process.env.NODE_ENV;
+  const previousPresentationMode = process.env.CAMPUS_PRESENTATION_MODE;
   let upstreamCalls = 0;
-  process.env.NODE_ENV = "demo";
+  process.env.NODE_ENV = "production";
+  process.env.CAMPUS_PRESENTATION_MODE = "true";
   const demoServer = createServer({
     getApiKey: () => "test-secret",
     fetchGemini: async () => {
@@ -251,6 +292,8 @@ test("never calls Gemini from presentation demo mode, even when a key is configu
     await new Promise((resolve, reject) => demoServer.close((error) => error ? reject(error) : resolve()));
     if (previousMode === undefined) delete process.env.NODE_ENV;
     else process.env.NODE_ENV = previousMode;
+    if (previousPresentationMode === undefined) delete process.env.CAMPUS_PRESENTATION_MODE;
+    else process.env.CAMPUS_PRESENTATION_MODE = previousPresentationMode;
   }
 });
 
