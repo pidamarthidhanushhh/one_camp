@@ -1,10 +1,10 @@
 # Campus production pilot setup
 
-The repository includes a Render Blueprint (`render.yaml`) for a small, single-region pilot. It provisions PostgreSQL with pgvector and one Node service that runs the web app and document worker together. A persistent disk keeps private PDF uploads available to both processes.
+The repository includes two Render configurations. The root `render.yaml` is a free presentation demo with no database, Gemini key, or real sign-in. This guide describes the paid, database-backed setup in `render.production.yaml`: PostgreSQL with pgvector and one Node service that runs the web app and document worker together. A persistent disk keeps private PDF uploads available to both processes.
 
 ## Before creating the Blueprint
 
-1. In Render, create a new Blueprint from `pidamarthidhanushhh/one_camp` on the `main` branch. Review the selected service and database plans before approving creation. The `campus-pilot` service name must be unique in your Render workspace; if you rename it, the callback URL will use the assigned Render hostname.
+1. In Render, create a new Blueprint from `pidamarthidhanushhh/one_camp` on the `main` branch and select `render.production.yaml` as the Blueprint file. Review the selected service and database plans before approving creation. The `campus-pilot` service name must be unique in your Render workspace; if you rename it, the callback URL will use the assigned Render hostname.
 2. The initial app starts in sign-in setup mode. It does not expose demo credentials while `OIDC_ISSUER` is configured. The Google sign-in button remains unavailable until the client is added.
 3. After Render assigns the service URL, create a **Web application** OAuth client in Google Cloud Console. Set its authorized redirect URI to:
 

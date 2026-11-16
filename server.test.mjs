@@ -195,6 +195,29 @@ test("reports missing server-side Gemini configuration without exposing credenti
   }
 });
 
+test("explains that AI features are off in the presentation demo", async () => {
+  const previousMode = process.env.NODE_ENV;
+  const previousKey = process.env.GEMINI_API_KEY;
+  process.env.NODE_ENV = "demo";
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [{ role: "user", text: "Explain cell division" }] }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "Raze is turned off in this presentation demo.",
+    });
+  } finally {
+    if (previousMode === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousMode;
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+  }
+});
+
 test("rejects invalid PDFs before contacting Gemini", async () => {
   const previousKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = "test-key-not-used";

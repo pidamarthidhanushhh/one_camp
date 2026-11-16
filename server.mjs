@@ -96,6 +96,12 @@ function respondJson(response, status, body, extraHeaders = {}) {
   response.end(JSON.stringify(body));
 }
 
+function unavailableAiMessage(feature, configuredMessage) {
+  return process.env.NODE_ENV === "demo"
+    ? `${feature} is turned off in this presentation demo.`
+    : configuredMessage;
+}
+
 function readJson(request) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -193,7 +199,7 @@ async function analyzePdf(request, response, { fetchGemini, getApiKey, requestCo
 
   const apiKey = getApiKey();
   if (!apiKey) {
-    respondJson(response, 503, { error: "PDF analysis is not configured. Set GEMINI_API_KEY on the server." });
+    respondJson(response, 503, { error: unavailableAiMessage("PDF analysis", "PDF analysis is not configured. Set GEMINI_API_KEY on the server.") });
     return;
   }
 
@@ -318,7 +324,7 @@ async function chatWithRaze(request, response, { fetchGemini, getApiKey, request
 
   const apiKey = getApiKey();
   if (!apiKey) {
-    respondJson(response, 503, { error: "Raze is not configured. Set GEMINI_API_KEY on the server." });
+    respondJson(response, 503, { error: unavailableAiMessage("Raze", "Raze is not configured. Set GEMINI_API_KEY on the server.") });
     return;
   }
 
@@ -498,7 +504,7 @@ async function generateStudySummary(request, response, { fetchGemini, getApiKey,
 
   const apiKey = getApiKey();
   if (!apiKey) {
-    respondJson(response, 503, { error: "AI summaries are not configured. Set GEMINI_API_KEY on the server." });
+    respondJson(response, 503, { error: unavailableAiMessage("AI summaries", "AI summaries are not configured. Set GEMINI_API_KEY on the server.") });
     return;
   }
 
@@ -651,7 +657,7 @@ async function generateStudyTools(request, response, { fetchGemini, getApiKey, r
 
   const apiKey = getApiKey();
   if (!apiKey) {
-    respondJson(response, 503, { error: "AI practice tools are not configured. Set GEMINI_API_KEY on the server." });
+    respondJson(response, 503, { error: unavailableAiMessage("AI practice tools", "AI practice tools are not configured. Set GEMINI_API_KEY on the server.") });
     return;
   }
 
