@@ -12,7 +12,9 @@ export function getDatabasePool() {
     max: Number(process.env.DATABASE_POOL_SIZE || 10),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
-    ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: true } : undefined,
+    ssl: process.env.DATABASE_SSL === "true"
+      ? { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== "false" }
+      : undefined,
   });
   return pool;
 }

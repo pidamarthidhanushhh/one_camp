@@ -9,6 +9,7 @@ import {
   completeOidcLogin,
   endAuthenticatedSession,
   getAuthenticatedSession,
+  getOidcRedirectUri,
   isOidcEnabled,
   sessionCookie,
   readCookie,
@@ -59,6 +60,10 @@ function renderWorkspacePage(indexHtml, role, authMode = "demo") {
 }
 
 function renderOidcLoginPage(indexHtml) {
+  const setupPending = process.env.OIDC_SETUP_PENDING === "true";
+  const signInControl = setupPending
+    ? '<p class="login-feedback" role="status">Secure campus sign-in is being configured. Please try again soon.</p>'
+    : '<a class="button button-dark login-submit oidc-login" id="oidc-login" href="/auth/login">Continue with campus account <span aria-hidden="true">→</span></a>';
   return Buffer.from(indexHtml.toString("utf8")
     .replace("<body>", '<body data-auth-mode="oidc">')
     .replace('<form class="login-card" id="login-form">', '<form class="login-card" id="login-form" hidden>')
@@ -68,7 +73,7 @@ function renderOidcLoginPage(indexHtml) {
     .replace('value="student@matrusri.edu.in"', 'value=""')
     .replace('value="CampusStudent2026!"', 'value=""')
     .replace(/id="demo-credential-(?:email|password)">[^<]*/g, (match) => match.slice(0, match.indexOf(">") + 1))
-    .replace("            </form>\n          </div>", '            </form>\n            <a class="button button-dark login-submit oidc-login" id="oidc-login" href="/auth/login">Continue with campus account <span aria-hidden="true">→</span></a>\n            <p class="login-feedback" id="oidc-feedback" role="status" aria-live="polite" hidden></p>\n          </div>'));
+    .replace(/<\/form>\r?\n\s*<\/div>/, `</form>\n            ${signInControl}\n            <p class="login-feedback" id="oidc-feedback" role="status" aria-live="polite" hidden></p>\n          </div>`));
 }
 
 function respondRedirect(response, location, cookies = []) {
@@ -816,31 +821,44 @@ async function generateStudyTools(request, response, { fetchGemini, getApiKey, r
 
 const requiredProductionSettings = [
   "OIDC_ISSUER",
-  "OIDC_CLIENT_ID",
-  "OIDC_CLIENT_SECRET",
-  "OIDC_REDIRECT_URI",
   "OIDC_ALLOWED_EMAIL_DOMAINS",
   "SESSION_SECRET",
   "CAMPUS_ORGANIZATION_ID",
   "CAMPUS_ORGANIZATION_NAME",
   "DATABASE_URL",
   "DATABASE_SSL",
-  "GEMINI_API_KEY",
 ];
 
 export function assertProductionConfiguration(environment = process.env) {
   if (environment.NODE_ENV !== "production") return;
   const missingSettings = requiredProductionSettings.filter((name) => !environment[name]?.trim());
+  const oidcSetupPending = environment.OIDC_SETUP_PENDING === "true";
+  if (!oidcSetupPending) {
+    for (const name of ["OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"]) {
+      if (!environment[name]?.trim()) missingSettings.push(name);
+    }
+  }
   if (missingSettings.length) {
     throw new Error(`Production startup requires these environment settings: ${missingSettings.join(", ")}`);
   }
-  const unusableSettings = requiredProductionSettings.filter((name) => /replace-with|replace-me|example\.(?:edu|com)/i.test(environment[name]));
-  for (const name of ["OIDC_ISSUER", "OIDC_REDIRECT_URI"]) {
+  const settingsToCheck = oidcSetupPending
+    ? requiredProductionSettings
+    : [...requiredProductionSettings, "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET"];
+  const unusableSettings = settingsToCheck.filter((name) => /replace-with|replace-me|example\.(?:edu|com)/i.test(environment[name] || ""));
+  for (const name of ["OIDC_ISSUER"]) {
     try {
       if (new URL(environment[name]).protocol !== "https:") unusableSettings.push(name);
     } catch {
       unusableSettings.push(name);
     }
+  }
+  try {
+    const redirectUri = environment.OIDC_REDIRECT_URI?.trim()
+      ? new URL(environment.OIDC_REDIRECT_URI)
+      : new URL("/auth/callback", environment.RENDER_EXTERNAL_URL);
+    if (redirectUri.protocol !== "https:") unusableSettings.push("OIDC_REDIRECT_URI");
+  } catch {
+    unusableSettings.push("OIDC_REDIRECT_URI");
   }
   try {
     const databaseProtocol = new URL(environment.DATABASE_URL).protocol;
@@ -897,12 +915,12 @@ export function createServer({
         const target = result.session.role === "student" ? "/student" : "/admin";
         respondRedirect(response, target, [
           sessionCookie(result.token, result.maxAge, result.cookie),
-          clearOidcTransactionCookie({ redirectUri: new URL(process.env.OIDC_REDIRECT_URI) }),
+          clearOidcTransactionCookie({ redirectUri: getOidcRedirectUri() }),
         ]);
       } catch (error) {
         console.error("OIDC callback failed:", error.message);
         let clearCookie = "campus_oidc_transaction=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
-        try { clearCookie = clearOidcTransactionCookie({ redirectUri: new URL(process.env.OIDC_REDIRECT_URI) }); } catch { /* Keep the basic clearing cookie. */ }
+        try { clearCookie = clearOidcTransactionCookie({ redirectUri: getOidcRedirectUri() }); } catch { /* Keep the basic clearing cookie. */ }
         respondRedirect(response, "/?auth_error=login", [clearCookie]);
       }
       return;
@@ -936,7 +954,7 @@ export function createServer({
       try {
         await endAuthenticatedSession(request);
         respondJson(response, 200, { ok: true }, {
-          "set-cookie": clearSessionCookie({ redirectUri: new URL(process.env.OIDC_REDIRECT_URI) }),
+          "set-cookie": clearSessionCookie({ redirectUri: getOidcRedirectUri() }),
         });
       } catch (error) {
         console.error("Could not end Campus session:", error.message);

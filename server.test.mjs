@@ -20,11 +20,11 @@ test("serves the app from the same origin as the analysis API", async () => {
   assert.match(await response.text(), /Share a resource/);
 });
 
-test("refuses production startup when OIDC, database, or AI settings are missing or placeholders", () => {
+test("refuses production startup when required OIDC or database settings are missing or placeholders", () => {
   assert.doesNotThrow(() => assertProductionConfiguration({ NODE_ENV: "development" }));
   assert.throws(
     () => assertProductionConfiguration({ NODE_ENV: "production" }),
-    /OIDC_ISSUER.*DATABASE_URL.*GEMINI_API_KEY/,
+    /OIDC_ISSUER.*DATABASE_URL/,
   );
   const productionEnvironment = {
     NODE_ENV: "production",
@@ -50,9 +50,37 @@ test("refuses production startup when OIDC, database, or AI settings are missing
     CAMPUS_ORGANIZATION_ID: "68b0047b-56b4-4d99-ae84-aaece956a30a",
     DATABASE_URL: "postgresql://campus:secret@db.matrusri.edu.in:5432/campus",
     DATABASE_SSL: "true",
-    GEMINI_API_KEY: "production-gemini-key",
   });
+  delete productionEnvironment.GEMINI_API_KEY;
   assert.doesNotThrow(() => assertProductionConfiguration(productionEnvironment));
+
+  const initialDeployment = { ...productionEnvironment, OIDC_SETUP_PENDING: "true", RENDER_EXTERNAL_URL: "https://campus-pilot.onrender.com" };
+  delete initialDeployment.OIDC_CLIENT_ID;
+  delete initialDeployment.OIDC_CLIENT_SECRET;
+  delete initialDeployment.OIDC_REDIRECT_URI;
+  assert.doesNotThrow(() => assertProductionConfiguration(initialDeployment));
+  initialDeployment.OIDC_SETUP_PENDING = "false";
+  assert.throws(() => assertProductionConfiguration(initialDeployment), /OIDC_CLIENT_ID.*OIDC_CLIENT_SECRET/);
+});
+
+test("shows a setup message instead of a dead sign-in button while OIDC is pending", async () => {
+  const previousIssuer = process.env.OIDC_ISSUER;
+  const previousPending = process.env.OIDC_SETUP_PENDING;
+  try {
+    process.env.OIDC_ISSUER = "https://accounts.google.com";
+    process.env.OIDC_SETUP_PENDING = "true";
+    const response = await fetch(`${baseUrl}/`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Secure campus sign-in is being configured/);
+    assert.doesNotMatch(html, /id="oidc-login"/);
+    assert.doesNotMatch(html, /CampusStudent2026!/);
+  } finally {
+    if (previousIssuer === undefined) delete process.env.OIDC_ISSUER;
+    else process.env.OIDC_ISSUER = previousIssuer;
+    if (previousPending === undefined) delete process.env.OIDC_SETUP_PENDING;
+    else process.env.OIDC_SETUP_PENDING = previousPending;
+  }
 });
 
 test("serves standalone role workspaces without the login page", async () => {
